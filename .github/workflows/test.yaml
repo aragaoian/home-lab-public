@@ -1,0 +1,25 @@
+name: Rootless Docker Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  docker-test:
+    runs-on: [self-hosted, linux, x64]
+
+    steps:
+      - name: Check Docker
+        run: |
+          whoami
+          docker context show
+          docker version
+          docker compose version
+
+      - name: Run test container
+        run: docker run --rm hello-world
+
+      - name: Test NVIDIA GPU
+        run: docker run --rm --gpus all ubuntu nvidia-smi
+
+      - name: Check containers
+        run: docker ps -a

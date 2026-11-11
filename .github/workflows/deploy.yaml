@@ -1,0 +1,77 @@
+
+name: Deploy home-lab infra
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "docker-compose.yaml"
+      - "Dockerfile"
+      - ".env.example"
+      - ".github/workflows/deploy.yaml"
+
+  workflow_dispatch:
+
+concurrency:
+  group: mlflow-deployment
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to Home Lab
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Load deployment environment
+        run: |
+          cp /home/runner/secrets/.env .env
+          chmod 600 .env
+
+      - name: Check deployment configuration
+        run: |
+          pwd
+          ls -la
+          test -f docker-compose.yaml
+          test -f Dockerfile
+          test -f /home/runner/secrets/.env
+
+      - name: Validate Docker Compose
+        run: docker compose config --quiet
+
+      - name: Build images
+        run: docker compose build
+
+      - name: Deploy containers
+        run: docker compose up -d --remove-orphans
+
+      - name: Wait for services
+        run: |
+          for i in $(seq 1 30); do
+            if docker compose exec -T mlflow \
+              python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=3)" \
+              >/dev/null 2>&1; then
+              echo "MLflow is healthy."
+              exit 0
+            fi
+
+            echo "Waiting for MLflow... ($i/30)"
+            sleep 10
+          done
+
+          echo "MLflow failed to become healthy."
+          docker compose ps
+          docker compose logs --tail=100
+          exit 1
+
+      - name: Check running containers
+        if: always()
+        run: docker compose ps
+
+      - name: Show deployment logs on failure
+        if: failure()
+        run: docker compose logs --tail=100

@@ -1,0 +1,9 @@
+.git/
+data/
+datasets/
+artifacts/
+models/
+checkpoints/
+.env
+__pycache__
+*.pyc
